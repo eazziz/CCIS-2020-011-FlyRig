@@ -47,6 +47,9 @@ obtain(['fs','fluent-ffmpeg', 'path', 'child_process'], (fs, ffmpeg, path, child
         this.onAddRunStart = ()=>{};
         this.onAddRunDone = ()=>{};
         this.onAddRunError = ()=>{};
+        this.onPushStart = ()=>{};
+        this.onPushDone = ()=>{};
+        this.onPushError = ()=>{};
       }
 
       clear() {
@@ -233,7 +236,52 @@ obtain(['fs','fluent-ffmpeg', 'path', 'child_process'], (fs, ffmpeg, path, child
           } else {
             console.log(stdout);
             _this.onAddRunDone(stdout);
+            var match = /^Added (\S+)/m.exec(stdout);
+            _this.pushRun(match ? match[1] : null);
           }
+        });
+      }
+
+      // Runs check_run.py, then git add/commit/push, so a recording goes
+      // from the camera to GitHub with no manual git command. If check_run.py
+      // finds a real error (not just a warning), nothing is committed - the
+      // run stays local, uncommitted, for a human to look at.
+      pushRun(runId){
+        var _this = this;
+        var checkScript = path.join(_this.dataRepoPath, 'scripts', 'check_run.py');
+        var checkArgs = runId ? [checkScript, runId] : [checkScript];
+
+        childProcess.execFile(_this.pythonPath || 'python3', checkArgs, { cwd: _this.dataRepoPath }, (checkError, checkOut, checkErr)=>{
+          if (checkError) {
+            console.log('check_run.py failed:', checkErr || checkOut || checkError.message);
+            _this.onPushError(new Error(checkErr || checkOut || checkError.message));
+            return;
+          }
+
+          _this.onPushStart();
+
+          childProcess.execFile('git', ['add', '.'], { cwd: _this.dataRepoPath }, (addError, addOut, addErr)=>{
+            if (addError) {
+              _this.onPushError(new Error(addErr || addError.message));
+              return;
+            }
+
+            var commitMessage = runId ? `Add run ${runId}` : 'Add run';
+            childProcess.execFile('git', ['commit', '-m', commitMessage], { cwd: _this.dataRepoPath }, (commitError, commitOut, commitErr)=>{
+              if (commitError) {
+                _this.onPushError(new Error(commitErr || commitOut || commitError.message));
+                return;
+              }
+
+              childProcess.execFile('git', ['push'], { cwd: _this.dataRepoPath }, (pushError, pushOut, pushErr)=>{
+                if (pushError) {
+                  _this.onPushError(new Error(pushErr || pushError.message));
+                  return;
+                }
+                _this.onPushDone(runId);
+              });
+            });
+          });
         });
       }
 

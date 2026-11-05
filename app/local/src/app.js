@@ -284,12 +284,24 @@ obtain(obtains, ({ LightControl }, {Camera}, {ProgressRing}, os, path)=> {
     }
 
     cam.onAddRunDone = (output)=>{
-      note('Run added to data repo. Fill in notes.md, then check & push.');
       console.log(output);
     }
 
     cam.onAddRunError = (err)=>{
       note('Saved video file, but adding it to the data repo failed (see console).');
+      console.log(err);
+    }
+
+    cam.onPushStart = ()=>{
+      note('Run added to data repo. Pushing to GitHub...');
+    }
+
+    cam.onPushDone = (runId)=>{
+      note(`Run ${runId || ''} pushed to GitHub.`.trim());
+    }
+
+    cam.onPushError = (err)=>{
+      note('Run saved locally, but pushing to GitHub failed (see console). Ask for help if this keeps happening.');
       console.log(err);
     }
 
