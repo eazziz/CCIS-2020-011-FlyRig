@@ -108,6 +108,11 @@ obtain(obtains, ({ LightControl }, {Camera}, {ProgressRing}, os, path)=> {
 
     var cam = µ('cam-era')[0];
 
+    cam.dataRepoPath = config.dataRepoPath;
+    cam.pythonPath = config.pythonPath;
+    cam.operator = operatorName.value;
+    cam.runType = runType.value;
+
     filePath.value = path.join(os.homedir());//os.homedir(), '/Documents/FlyVideos');
 
     var note = text=>Notes.textContent = text;
@@ -274,6 +279,20 @@ obtain(obtains, ({ LightControl }, {Camera}, {ProgressRing}, os, path)=> {
       note('Saved video file.');
     }
 
+    cam.onAddRunStart = ()=>{
+      note('Saved video file. Adding run to data repo...');
+    }
+
+    cam.onAddRunDone = (output)=>{
+      note('Run added to data repo. Fill in notes.md, then check & push.');
+      console.log(output);
+    }
+
+    cam.onAddRunError = (err)=>{
+      note('Saved video file, but adding it to the data repo failed (see console).');
+      console.log(err);
+    }
+
     control.onready = ()=>{
       //µ('#notes').textContent = 'Controller Ready';
 
@@ -299,6 +318,9 @@ obtain(obtains, ({ LightControl }, {Camera}, {ProgressRing}, os, path)=> {
       cam.options.video.frameRate = {ideal: rateSelect.value};
       cam.options.video.width.ideal = parseInt(widthSelect.value);
       cam.options.video.height.ideal = parseInt(heightSelect.value);
+      var selectedOption = cameraSource.options[cameraSource.selectedIndex];
+      cam.cameraLabel = selectedOption ? selectedOption.textContent : '';
+      cam.requestedFps = parseFloat(rateSelect.value) || null;
       cam.startStream();
     }
 
@@ -312,6 +334,7 @@ obtain(obtains, ({ LightControl }, {Camera}, {ProgressRing}, os, path)=> {
       track.applyConstraints({
         advanced: [{brightness: BrightSlide.value}]
       });
+      cam.brightness = BrightSlide.value;
     }
 
     ExpoSlide.onchange = ()=>{
@@ -319,6 +342,7 @@ obtain(obtains, ({ LightControl }, {Camera}, {ProgressRing}, os, path)=> {
       track.applyConstraints({
         advanced: [{exposureMode: "continuous",exposureTime: ExpoSlide.value}]
       });
+      cam.exposure = ExpoSlide.value;
     }
 
     var optsFromCues = ()=>{
@@ -337,6 +361,23 @@ obtain(obtains, ({ LightControl }, {Camera}, {ProgressRing}, os, path)=> {
         cues.splice(i,1);
       });
     };
+
+    MetaAdd.onclick = ()=>{
+      if(!metaKey.value) return;
+      let row = µ('+div', Metadata);
+      let lbl = µ('+label', row);
+      let inpt = µ('+input', row);
+      lbl.textContent = metaKey.value;
+      inpt.value = metaValue.value;
+      let remove = µ('+input', row);
+      remove.type = 'button';
+      remove.value = 'x';
+      remove.onclick = ()=>{
+        Metadata.removeChild(row);
+      };
+      metaKey.value = '';
+      metaValue.value = '';
+    }
 
     Add.onclick = ()=>{
       editingCue = new StimCue();
@@ -445,6 +486,14 @@ obtain(obtains, ({ LightControl }, {Camera}, {ProgressRing}, os, path)=> {
     baseName.onchange = ()=>{
       if(baseName.value.includes('\\') || baseName.value.includes('/')) baseName.value.replace(/\//g, '|');
       cam.baseName = baseName.value;
+    }
+
+    operatorName.onchange = ()=>{
+      cam.operator = operatorName.value;
+    }
+
+    runType.onchange = ()=>{
+      cam.runType = runType.value;
     }
 
     dataFile.onclick = (e) => {

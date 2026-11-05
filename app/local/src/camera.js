@@ -2,7 +2,7 @@ const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path.replace('.asar','.as
 
 console.log(ffmpegPath);
 
-obtain(['fs','fluent-ffmpeg', 'path'], (fs, ffmpeg, path)=> {
+obtain(['fs','fluent-ffmpeg', 'path', 'child_process'], (fs, ffmpeg, path, childProcess)=> {
   ffmpeg.setFfmpegPath(path.resolve(ffmpegPath));
 
   console.log(fs);
@@ -31,6 +31,22 @@ obtain(['fs','fluent-ffmpeg', 'path'], (fs, ffmpeg, path)=> {
         this.filePath = '';
 
         this.baseName = '';
+
+        // Local clone of the IU-ISE-FlyRig-Files data repo; set from config
+        // in app.js. When set, each save is handed to that repo's
+        // scripts/add_run.py once the video finishes writing.
+        this.dataRepoPath = '';
+        this.pythonPath = 'python3';
+        this.operator = '';
+        this.runType = 'practice';
+        this.cameraLabel = '';
+        this.requestedFps = null;
+        this.exposure = null;
+        this.brightness = null;
+
+        this.onAddRunStart = ()=>{};
+        this.onAddRunDone = ()=>{};
+        this.onAddRunError = ()=>{};
       }
 
       clear() {
@@ -133,6 +149,14 @@ obtain(['fs','fluent-ffmpeg', 'path'], (fs, ffmpeg, path)=> {
         var inter = path.join(__dirname,'../../../intermediate.webm').replace('.asar','.asar.unpacked');
         console.log(basePath);
         console.log(inter);
+
+        // One timestamp shared by the video and CSV, so they always match
+        // exactly (also what add_run.py is handed as --app-csv).
+        var stamp = (new Date()).toISOString().replace(/:|-|\./g,'_');
+        var stampedBase = `${basePath.replace(/\/:|-|\./g,'_')}_${stamp}`;
+        var videoFile = `${stampedBase}.mp4`;
+        var csvFile = `${stampedBase}.csv`;
+
         fs.writeFile(inter,buffer,'base64',(e)=>{
           if(!e){
             console.log("convert")
@@ -156,10 +180,11 @@ obtain(['fs','fluent-ffmpeg', 'path'], (fs, ffmpeg, path)=> {
             command.on('end', function() {
               _this.onSaveEnd();
               console.log('Finished processing');
+              _this.addRun(videoFile, csvFile);
             })
 
 
-            command.save(`${basePath.replace(/\/:|-|\./g,'_')}_${(new Date()).toISOString().replace(/:|-|\./g,'_')}.mp4`);
+            command.save(videoFile);
             var csv = '';
             csv += _this.addMet;
             for (var key in _this.metadata) {
@@ -167,10 +192,49 @@ obtain(['fs','fluent-ffmpeg', 'path'], (fs, ffmpeg, path)=> {
                 csv+=`"${key}","${_this.metadata[key]}"\n`;
               }
             }
-            fs.writeFileSync(`${basePath.replace(/\/:|-|\./g,'_')}_${(new Date()).toISOString().replace(/:|-|\./g,'_')}.csv`, csv);
+            fs.writeFileSync(csvFile, csv);
           }
         });
 
+      }
+
+      addRun(videoFile, csvFile){
+        var _this = this;
+        if (!_this.dataRepoPath) return;
+
+        // videoFile/csvFile may be relative (e.g. if Save Location's "Set"
+        // was never clicked - see app_notes.md). Resolve them against this
+        // process's cwd, same as the ffmpeg child process that wrote them,
+        // before handing them to add_run.py, which runs with a different cwd.
+        videoFile = path.resolve(videoFile);
+        csvFile = path.resolve(csvFile);
+
+        var scriptPath = path.join(_this.dataRepoPath, 'scripts', 'add_run.py');
+        if (!fs.existsSync(scriptPath)) {
+          var missing = new Error(`add_run.py not found at ${scriptPath}`);
+          console.log(missing.message);
+          _this.onAddRunError(missing);
+          return;
+        }
+
+        var args = [scriptPath, videoFile, '--app-csv', csvFile, '--run-type', _this.runType || 'practice'];
+        if (_this.operator) args.push('--operator', _this.operator);
+        if (_this.cameraLabel) args.push('--camera', _this.cameraLabel);
+        if (_this.requestedFps) args.push('--requested-fps', String(_this.requestedFps));
+        if (_this.exposure) args.push('--exposure', String(_this.exposure));
+        if (_this.brightness) args.push('--brightness', String(_this.brightness));
+
+        _this.onAddRunStart();
+
+        childProcess.execFile(_this.pythonPath || 'python3', args, { cwd: _this.dataRepoPath }, (error, stdout, stderr)=>{
+          if (error) {
+            console.log('add_run.py failed:', stderr || error.message);
+            _this.onAddRunError(new Error(stderr || error.message));
+          } else {
+            console.log(stdout);
+            _this.onAddRunDone(stdout);
+          }
+        });
       }
 
       makeDownload(blob){

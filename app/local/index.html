@@ -27,11 +27,9 @@
         <div class='section simple'>
           <div class='title'><span class='reveal'>▲</span>Metadata</div>
           <div class='opts'>
-            <!-- <div class='controlButtons sub cueMan'>
-              <input id='Add' type='button' value='Add'></input>
-              <input id='Edit' type='button' value='Edit'></input>
-              <input id='Delete' type='button' value='Delete'></input>
-            </div> -->
+            <div class='sub'><label>Key:</label><input id='metaKey' type="text"></input></div>
+            <div class='sub'><label>Value:</label><input id='metaValue' type="text"></input></div>
+            <div class='controlButtons'><input id='MetaAdd' type='button' value='Add'></input></div>
             <div class='sub' id='Metadata'>
             </div>
           </div>
@@ -124,6 +122,14 @@
                 <input id='filePath' type="text" />
                 <input id='SetPath' type='button' value='Set' />
               </span>
+            </div>
+            <div class='sub'><label>Operator:</label><input id='operatorName' type="text"></input></div>
+            <div class='sub'><label>Run Type:</label>
+              <select id='runType'>
+                <option value='practice' selected>Practice</option>
+                <option value='calibration'>Calibration</option>
+                <option value='experiment'>Experiment</option>
+              </select>
             </div>
             <div class='controlButtons'>
               <progress-ring></progress-ring>
